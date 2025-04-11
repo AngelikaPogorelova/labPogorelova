@@ -1,0 +1,24 @@
+"""
+    Вариант 28
+Нечетные восьмеричные числа, не превышающие 4095,0 у которых вторая справа цифра равна 7. Выводит на экран цифры числа, исключая семерки.
+Вычисляется среднее число между минимальным
+максимальным и выводится прописью.
+    """
+def is_octal(num):
+    return all('0' <= ch <= '7' for ch in num) #проверяет, является ли число восьмеричным
+
+with open("input.txt") as f:
+    numbers = []
+    results = []
+
+    for token in f.read().split():
+        if is_octal(token):
+            dec = int(token, 8)
+            if dec % 2 == 1 and dec <= 4095 and len(token) > 1 and token[-2] == '7': #проверяет число на четность, не превышает ли 4095, предпосл. цифра = 7
+                numbers.append(dec)
+                results.append(token.replace('7', ''))
+
+    if results:
+        print(" ".join(results))
+    if numbers:
+        print(f"Среднее: {(min(numbers) + max(numbers)) / 2:.1f}")
