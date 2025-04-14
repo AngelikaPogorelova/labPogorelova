@@ -1,0 +1,98 @@
+def read_matrix(filename):
+    with open(filename, 'r') as f:
+        lines = f.readlines()
+    N, K = map(int, lines[0].split())
+    A = [list(map(int, line.strip().split())) for line in lines[1:N+1]]
+    return A, K, N
+def copy_matrix(M):
+    return [row[:] for row in M]
+def get_area_indices(N):
+    areas = {'1': [], '2': [], '3': [], '4': []}
+    for i in range(N):
+        for j in range(N):
+            if i < j and i + j < N - 1:
+                areas['4'].append((i, j))
+            elif i > j and i + j < N - 1:
+                areas['3'].append((i, j))
+            elif i > j and i + j > N - 1:
+                areas['2'].append((i, j))
+            elif i < j and i + j > N - 1:
+                areas['1'].append((i, j))
+    return areas
+def count_zeros_in_odd_columns(area, A):
+    count = 0
+    for i, j in area:
+        if j % 2 == 1 and A[i][j] == 0:
+            count += 1
+    return count
+def sum_perimeter(area, A):
+    s = 0
+    for i, j in area:
+        if (
+            (i - 1, j) not in area or (i + 1, j) not in area or
+            (i, j - 1) not in area or (i, j + 1) not in area
+        ):
+            s += A[i][j]
+    return s
+def swap_symmetric(F, area1, area3):
+    print("\nСимметрично меняем области 1 и 3:")
+    for (i1, j1), (i3, j3) in zip(area1, area3):
+        print(f"  Меняем F[{i1}][{j1}] и F[{i3}][{j3}]")
+        F[i1][j1], F[i3][j3] = F[i3][j3], F[i1][j1]
+def swap_nonsymmetric(F, area2, area3):
+    print("\nНесимметрично меняем значения областей 2 и 3:")
+    for (i2, j2), (i3, j3) in zip(area2, area3):
+        print(f"  Меняем F[{i2}][{j2}] и F[{i3}][{j3}]")
+        # Меняем значения в обеих областях
+        F[i2][j2], F[i3][j3] = F[i3][j3], F[i2][j2]
+def matrix_add(A, B):
+    N = len(A)
+    return [[A[i][j] + B[i][j] for j in range(N)] for i in range(N)]
+def matrix_sub(A, B):
+    N = len(A)
+    return [[A[i][j] - B[i][j] for j in range(N)] for i in range(N)]
+def matrix_mult(A, B):
+    N = len(A)
+    result = [[0]*N for _ in range(N)]
+    for i in range(N):
+        for j in range(N):
+            for k in range(N):
+                result[i][j] += A[i][k] * B[k][j]
+    return result
+def transpose(M):
+    N = len(M)
+    return [[M[j][i] for j in range(N)] for i in range(N)]
+def scalar_mult(M, k):
+    N = len(M)
+    return [[M[i][j]*k for j in range(N)] for i in range(N)]
+
+def print_matrix(M, name):
+    print(f"\n{name}:")
+    for row in M:
+        print(' '.join(str(x) for x in row))
+def main():
+    A, K, N = read_matrix('matrix.txt')
+    print_matrix(A, "Матрица A")
+    F = copy_matrix(A)
+    areas = get_area_indices(N)
+    zeros_in_area2 = count_zeros_in_odd_columns(areas['2'], A)
+    print(f"\nНулей в нечетных столбцах области 2: {zeros_in_area2}")
+    perimeter_area4 = sum_perimeter(areas['4'], A)
+    print(f"Сумма по периметру области 4: {perimeter_area4}")
+    if zeros_in_area2 > perimeter_area4:
+        swap_symmetric(F, areas['1'], areas['3'])
+    else:
+        swap_nonsymmetric(F, areas['2'], areas['3'])
+    print_matrix(F, "Матрица F после изменений")
+    F_plus_A = matrix_add(F, A)
+    print_matrix(F_plus_A, "Матрица F + A")
+    A_times_sum = matrix_mult(A, F_plus_A)
+    print_matrix(A_times_sum, "Матрица A * (F + A)")
+    FT = transpose(F)
+    print_matrix(FT, "Транспонированная матрица F^T")
+    KFT = scalar_mult(FT, K)
+    print_matrix(KFT, f"Матрица K * F^T (где K = {K})")
+    result = matrix_sub(A_times_sum, KFT)
+    print_matrix(result, "Финальный результат: A*(F+A) - K*F^T")
+if __name__ == "__main__":
+    main()
