@@ -1,0 +1,6 @@
+import re
+with open("input.txt") as f:
+    text = f.read()
+nums = re.findall(r'\b(?:[0-7]{0,2 }7[1357])\b', text)
+if nums:
+    print(" ".join(x.replace('7', '') for x in nums), f"среднее {int((min(map(lambda x: int(x, 8), nums)) + max(map(lambda x: int(x, 8), nums))) / 2)}")
