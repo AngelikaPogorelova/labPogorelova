@@ -1,0 +1,38 @@
+import itertools
+# Вводим квалификации сотрудников
+skills = list(map(int, input("Введите квалификации 6 сотрудников через пробел: ").split()))
+if len(skills) != 6:
+    print("Ошибка: должно быть ровно 6 сотрудников.")
+    exit()
+best_score = -1
+best_teams = None
+# Генерируем все возможные разбиения на 3 пары
+for pairs in itertools.permutations(range(6)):
+    team1 = (pairs[0], pairs[1])
+    team2 = (pairs[2], pairs[3])
+    team3 = (pairs[4], pairs[5])
+    indices = [*team1, *team2, *team3]
+    # Проверка, что сотрудники не повторяются
+    if len(set(indices)) < 6:
+        continue
+    # Ограничение: в каждой паре разница квалификаций не больше 2
+    if abs(skills[team1[0]] - skills[team1[1]]) > 2:
+        continue
+    if abs(skills[team2[0]] - skills[team2[1]]) > 2:
+        continue
+    if abs(skills[team3[0]] - skills[team3[1]]) > 2:
+        continue
+    # Целевая функция: максимизируем суммарную квалификацию всех бригад
+    score = (skills[team1[0]] + skills[team1[1]] +
+             skills[team2[0]] + skills[team2[1]] +
+             skills[team3[0]] + skills[team3[1]])
+    if score > best_score:
+        best_score = score
+        best_teams = [(team1[0], team1[1]), (team2[0], team2[1]), (team3[0], team3[1])]
+# Вывод результата
+if best_teams:
+    print(f"\nЛучшее распределение {best_score}:")
+    for i, (a, b) in enumerate(best_teams, 1):
+        print(f"Бригада {i}: Сотрудники {a+1} и {b+1} (квалификации: {skills[a]}, {skills[b]})")
+else:
+    print("Нет допустимых распределений.")
