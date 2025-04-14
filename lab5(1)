@@ -1,0 +1,23 @@
+from itertools import combinations
+from itertools import permutations
+def generate_teams(people):
+    all_pairs = list(combinations(people, 2))
+    unique_groupings = set()
+    for pair1 in all_pairs:
+        remaining1 = set(people) - set(pair1)
+        for pair2 in combinations(remaining1, 2):
+            remaining2 = remaining1 - set(pair2)
+            pair3 = tuple(remaining2)
+            group = [tuple(sorted(pair1)), tuple(sorted(pair2)), tuple(sorted(pair3))]
+            group_sorted = tuple(sorted(group))
+            unique_groupings.add(group_sorted)
+    return unique_groupings
+# Список сотрудников
+people = [1, 2, 3, 4, 5, 6]
+# Получение всех вариантов
+groupings = generate_teams(people)
+# Вывод вариантов
+for i, grouping in enumerate(sorted(groupings), 1):
+    print(f"{i}: {grouping}")
+# Общее количество
+print(f"\nВсего вариантов: {len(groupings)}")
