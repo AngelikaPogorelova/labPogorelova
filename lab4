@@ -1,1 +1,92 @@
-
+import numpy as np  #NumPy для работы с массивами и линейной алгеброй
+import matplotlib.pyplot as plt  #matplotlib для построения графиков
+def read_matrix_from_file(filename, N):
+    with open(filename, 'r') as f:
+        data = f.read().split()
+    matrix = np.array(list(map(int, data))).reshape(N, N)  # np.array() — создаём массив NumPy из списка
+    # .reshape(N, N) — преобразуем его в матрицу N×N
+    return matrix
+def get_submatrices(A):
+    n = A.shape[0]  # .shape[0] — получаем количество строк в матрице A
+    half = n // 2
+    if n % 2 == 0:
+        D = A[:half, :half]
+        E = A[:half, half:]
+        C = A[half:, :half]
+        B = A[half:, half:]
+    else:
+        D = A[:half, :half]
+        E = A[:half, -half:]
+        C = A[-half:, :half]
+        B = A[-half:, -half:]
+    return B, C, D, E
+def analyze_C(C):
+    perim = np.concatenate([C[0, :], C[-1, :], C[1:-1, 0], C[1:-1, -1]]) # np.concatenate() — объединяет части массива (в данном случае — периметр)
+    zeros = np.sum(perim == 0)  # np.sum() — считает количество элементов, равных 0 
+    product = np.prod(perim) if len(perim) > 0 else 0  # np.prod() — возвращает произведение всех чисел в массиве
+    print(f"Анализ подматрицы C:")
+    print(f"Периметр C: {perim}")
+    print(f"Количество нулей по периметру C: {zeros}")
+    print(f"Произведение чисел по периметру C: {product}")
+    return zeros > product
+def modify_F(F, B, C, D, E, condition):
+    n = F.shape[0]  
+    half = n // 2
+    if n % 2 == 0:
+        if condition:
+            F[:half, half:] = np.flip(C)  # np.flip() — переворачивает массив (отражение симметрично)
+            F[half:, :half] = E
+        else:
+            F[half:, :half], F[half:, half:] = B, C
+    else:
+        if condition:
+            F[:half, -half:] = np.flip(C)
+            F[-half:, :half] = E
+        else:
+            F[-half:, :half], F[-half:, -half:] = B, C
+    return F
+def main():
+    K = int(input("Введите K: "))
+    N = int(input("Введите N (размерность матрицы): "))
+    A = read_matrix_from_file('mat.txt', N)
+    print("Матрица A:\n", A)
+    F = A.copy()  # .copy() — создаёт копию массива A
+    B, C, D, E = get_submatrices(A)
+    print("\nПодматрица C:\n", C)
+    condition = analyze_C(C)
+    print(f"Условие замены: {'выполняется (меняем C и E симметрично)' if condition else 'НЕ выполняется (меняем C и B несимметрично)'}")
+    F = modify_F(F, B, C, D, E, condition)
+    print("\nМатрица F:\n", F)
+    try:
+        det_A = np.linalg.det(A)  
+        # np.linalg.det() — вычисляем определитель матрицы A
+        diag_sum_F = np.trace(F)  
+        print("\nОпределитель A:", det_A)
+        print("Сумма диагональных элементов F:", diag_sum_F)
+        if det_A > diag_sum_F:
+            A_inv = np.linalg.inv(A)  # np.linalg.inv() — обратная матрица к A
+            AT = A.T  # .T — транспонирование матрицы
+            result = A_inv @ AT - K * F  # @ — оператор матричного умножения
+            print("\nРезультат (A^-1 * A^T - K * F):\n", result)
+        else:
+            G = np.tril(A)  
+            F_inv = np.linalg.inv(F)
+            result = (A + G - F_inv) * K
+        plt.figure(figsize=(12, 4))
+        plt.subplot(1, 3, 1)
+        plt.imshow(F, cmap='viridis')
+        plt.title("Матрица F")
+        plt.colorbar()
+        plt.subplot(1, 3, 2)
+        plt.plot(result.flatten(), label='Значения')  
+        plt.title("Плоский график результата")
+        plt.legend()
+        plt.subplot(1, 3, 3)
+        plt.hist(result.flatten(), bins=20, color='skyblue')  
+        plt.title("Гистограмма результата")
+        plt.tight_layout()
+        plt.show()
+    except np.linalg.LinAlgError:
+        print("Невозможно вычислить обратную матрицу.")
+if __name__ == "__main__":
+    main()
