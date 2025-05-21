@@ -1,0 +1,65 @@
+import tkinter as tk
+from tkinter import scrolledtext, messagebox, Toplevel
+import itertools
+
+def find_best_distribution():
+    try:
+        skills = list(map(int, entry.get().split()))
+        if len(skills) != 6:
+            raise ValueError
+    except ValueError:
+        messagebox.showerror("Ошибка ввода", "Введите ровно 6 целых чисел через пробел.")
+        return
+
+    best_score = -1
+    best_teams = None
+
+    for pairs in itertools.permutations(range(6)):
+        team1 = (pairs[0], pairs[1])
+        team2 = (pairs[2], pairs[3])
+        team3 = (pairs[4], pairs[5])
+        indices = [*team1, *team2, *team3]
+
+        if len(set(indices)) < 6:
+            continue
+
+        if abs(skills[team1[0]] - skills[team1[1]]) > 2:
+            continue
+        if abs(skills[team2[0]] - skills[team2[1]]) > 2:
+            continue
+        if abs(skills[team3[0]] - skills[team3[1]]) > 2:
+            continue
+
+        score = sum(skills[i] for i in indices)
+        if score > best_score:
+            best_score = score
+            best_teams = [(team1[0], team1[1]), (team2[0], team2[1]), (team3[0], team3[1])]
+
+    show_result_window(best_teams, skills, best_score)
+
+def show_result_window(best_teams, skills, best_score):
+    result_window = Toplevel(root)
+    result_window.title("Результат распределения")
+
+    output_text = scrolledtext.ScrolledText(result_window, width=60, height=15)
+    output_text.pack(padx=10, pady=10, fill="both", expand=True)
+
+    if best_teams:
+        output_text.insert(tk.END, f"Лучшее распределение (сумма квалификаций: {best_score}):\n")
+        for i, (a, b) in enumerate(best_teams, 1):
+            output_text.insert(tk.END, f"Бригада {i}: Сотрудники {a+1} и {b+1} (квалификации: {skills[a]}, {skills[b]})\n")
+    else:
+        output_text.insert(tk.END, "Нет допустимых распределений.\n")
+
+# Главное окно
+root = tk.Tk()
+root.title("Распределение 6 сотрудников по бригадам")
+
+tk.Label(root, text="Введите квалификации 6 сотрудников через пробел:").pack(pady=5)
+
+entry = tk.Entry(root, width=50)
+entry.pack(pady=5)
+
+tk.Button(root, text="Распределить", command=find_best_distribution).pack(pady=10)
+
+root.mainloop()
