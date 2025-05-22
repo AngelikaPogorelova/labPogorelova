@@ -1,0 +1,87 @@
+import csv
+from tkinter import *
+from tkinter import messagebox, filedialog
+class Booking:
+    def __init__(self, guest, room_type, stay_length):
+        self.guest = guest
+        self.room_type = room_type
+        self.stay_length = int(stay_length)
+class BookingManager:
+    def __init__(self):
+        self.bookings = []
+
+    def load_from_file(self, filename):
+        self.bookings.clear()
+        try:
+            with open(filename, newline='', encoding='utf-8') as file:
+                reader = csv.reader(file)
+                next(reader)  
+                for row in reader:
+                    if len(row) != 3:
+                        continue
+                    guest, room_type, stay_length = row
+                    self.bookings.append(Booking(guest, room_type, stay_length))
+            return True
+        except Exception as e:
+            messagebox.showerror("Ошибка загрузки", str(e))
+            return False
+    def segment_by_stay_length(self):
+        segments = {"1 день": 0, "2-3 дня": 0, "4+ дня": 0}
+        for b in self.bookings:
+            if b.stay_length == 1:
+                segments["1 день"] += 1
+            elif 2 <= b.stay_length <= 3:
+                segments["2-3 дня"] += 1
+            else:
+                segments["4+ дня"] += 1
+        return segments
+    def segment_by_room_type(self):
+        segments = {}
+        for b in self.bookings:
+            if b.room_type not in segments:
+                segments[b.room_type] = 0
+            segments[b.room_type] += 1
+        return segments
+class BookingApp:
+    def __init__(self, root):
+        self.manager = BookingManager()
+        self.root = root
+        self.root.title("Анализ бронирования")
+        self.canvas = Canvas(root, width=400, height=300, bg="white")
+        self.canvas.pack()
+
+        Button(root, text="Загрузить брони", command=self.load_data).pack(pady=5)
+        Button(root, text="Сегментировать по сроку", command=self.show_stay_pie).pack(pady=5)
+        Button(root, text="Сегментировать по типу номера", command=self.show_type_pie).pack(pady=5)
+
+    def load_data(self):
+        filepath = filedialog.askopenfilename(title="Выберите файл", filetypes=[("CSV files", "*.csv")])
+        if filepath and self.manager.load_from_file(filepath):
+            messagebox.showinfo("Успешно", "Файл успешно загружен")
+
+    def show_stay_pie(self):
+        data = self.manager.segment_by_stay_length()
+        self.draw_pie(data)
+
+    def show_type_pie(self):
+        data = self.manager.segment_by_room_type()
+        self.draw_pie(data)
+
+    def draw_pie(self, data):
+        self.canvas.delete("all")
+        total = sum(data.values())
+        if total == 0:
+            self.canvas.create_text(200, 150, text="Нет данных для отображения", fill="red")
+            return
+        start = 0
+        colors = ["red", "green", "blue", "orange", "purple", "gray"]
+        for i, (key, value) in enumerate(data.items()):
+            extent = 360 * value / total
+            self.canvas.create_arc(50, 50, 250, 250, start=start, extent=extent, fill=colors[i % len(colors)])
+            self.canvas.create_text(300, 70 + i * 20, text=f"{key}: {value}", anchor="w")
+            start += extent
+
+if __name__ == "__main__":
+    root = Tk()
+    app = BookingApp(root)
+    root.mainloop()
