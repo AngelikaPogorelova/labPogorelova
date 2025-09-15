@@ -1,0 +1,155 @@
+import tkinter as tk
+
+SIZE = 300        # pixels for board
+CELL = SIZE // 3
+LINE_WIDTH = 4
+SYMBOL_WIDTH = 6
+
+PLAYER = "X"      # human
+BOT = "O"         # computer
+
+class TicTacToe:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Крестики-нолики — игра с ботом (minimax + αβ)")
+        self.canvas = tk.Canvas(root, width=SIZE, height=SIZE, bg="white")
+        self.canvas.pack()
+        self.status = tk.Label(root, text="Ваш ход (X)", font=("Helvetica", 14))
+        self.status.pack(pady=6)
+        btn_frame = tk.Frame(root)
+        btn_frame.pack()
+        tk.Button(btn_frame, text="Новая игра", command=self.reset).pack(side="left", padx=6)
+        tk.Button(btn_frame, text="Поменять знак", command=self.bot_first).pack(side="left")
+        self.canvas.bind("<Button-1>", self.click)
+        self.reset()
+
+    def reset(self):
+        self.board = [None]*9
+        self.game_over = False
+        self.draw_board()
+        self.status.config(text="Ваш ход (X)")
+        self.current = PLAYER
+
+    def bot_first(self):
+        self.reset()
+        self.current = BOT
+        self.root.after(200, self.bot_move)
+
+    def draw_board(self):
+        self.canvas.delete("all")
+        for i in range(1,3):
+            x = i*CELL
+            self.canvas.create_line(x, 0, x, SIZE, width=LINE_WIDTH)
+            y = i*CELL
+            self.canvas.create_line(0, y, SIZE, y, width=LINE_WIDTH)
+        for i, v in enumerate(self.board):
+            if v:
+                r = i//3; c = i%3
+                x0 = c*CELL; y0 = r*CELL
+                if v == "X":
+                    pad = CELL*0.18
+                    self.canvas.create_line(x0+pad, y0+pad, x0+CELL-pad, y0+CELL-pad, width=SYMBOL_WIDTH, capstyle="round")
+                    self.canvas.create_line(x0+pad, y0+CELL-pad, x0+CELL-pad, y0+pad, width=SYMBOL_WIDTH, capstyle="round")
+                else:
+                    pad = CELL*0.15
+                    self.canvas.create_oval(x0+pad, y0+pad, x0+CELL-pad, y0+CELL-pad, width=SYMBOL_WIDTH)
+
+    def click(self, event):
+        if self.game_over or self.current != PLAYER:
+            return
+        c = event.x // CELL
+        r = event.y // CELL
+        idx = r*3 + c
+        if 0 <= idx < 9 and self.board[idx] is None:
+            self.board[idx] = PLAYER
+            self.draw_board()
+            if self.check_end(): return
+            self.current = BOT
+            self.status.config(text="Ходит бот (O)...")
+            self.root.after(150, self.bot_move)
+
+    def bot_move(self):
+        if self.game_over: return
+        move = self.find_best_move()
+        if move is not None:
+            self.board[move] = BOT
+            self.draw_board()
+        if self.check_end(): return
+        self.current = PLAYER
+        self.status.config(text="Ваш ход (X)")
+
+    def check_end(self):
+        winner = self.winner(self.board)
+        if winner:
+            self.game_over = True
+            self.status.config(text=f"Победил {winner}")
+            return True
+        if all(self.board):
+            self.game_over = True
+            self.status.config(text="Ничья")
+            return True
+        return False
+
+    def winner(self, b):
+        lines = [(0,1,2),(3,4,5),(6,7,8),(0,3,6),(1,4,7),(2,5,8),(0,4,8),(2,4,6)]
+        for a,d,c in lines:
+            if b[a] and b[a] == b[d] == b[c]:
+                return b[a]
+        return None
+
+    # Minimax with alpha-beta pruning
+    def minimax(self, b, depth, alpha, beta, is_maximizing):
+        win = self.winner(b)
+        if win == BOT:
+            return 10 - depth
+        if win == PLAYER:
+            return depth - 10
+        if all(b):
+            return 0
+
+        if is_maximizing:
+            max_eval = -999
+            for i in range(9):
+                if b[i] is None:
+                    b[i] = BOT
+                    eval = self.minimax(b, depth+1, alpha, beta, False)
+                    b[i] = None
+                    if eval > max_eval:
+                        max_eval = eval
+                    alpha = max(alpha, eval)
+                    if beta <= alpha:
+                        break
+            return max_eval
+        else:
+            min_eval = 999
+            for i in range(9):
+                if b[i] is None:
+                    b[i] = PLAYER
+                    eval = self.minimax(b, depth+1, alpha, beta, True)
+                    b[i] = None
+                    if eval < min_eval:
+                        min_eval = eval
+                    beta = min(beta, eval)
+                    if beta <= alpha:
+                        break
+            return min_eval
+
+    def find_best_move(self):
+        best_val = -999
+        best_move = None
+        if all(x is None for x in self.board):
+            return 4
+        for i in range(9):
+            if self.board[i] is None:
+                self.board[i] = BOT
+                move_val = self.minimax(self.board, 0, -999, 999, False)
+                self.board[i] = None
+                if move_val > best_val:
+                    best_val = move_val
+                    best_move = i
+        return best_move
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = TicTacToe(root)
+    root.mainloop()
