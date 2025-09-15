@@ -1,12 +1,12 @@
 import tkinter as tk
 
-SIZE = 300        # pixels for board
+SIZE = 300      
 CELL = SIZE // 3
 LINE_WIDTH = 4
 SYMBOL_WIDTH = 6
 
-PLAYER = "X"      # human
-BOT = "O"         # computer
+PLAYER = "X"
+BOT = "O" 
 
 class TicTacToe:
     def __init__(self, root):
