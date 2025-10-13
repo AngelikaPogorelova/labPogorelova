@@ -115,6 +115,6 @@ class Game:
         self.canvas.create_text(380,200,text=text,fill="gold",font="Arial 24 bold")
 
 root=tk.Tk()
-root.title("Морской бой — Tkinter")
+root.title("Морской бой")
 Game(root)
 root.mainloop()
