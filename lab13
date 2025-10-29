@@ -1,0 +1,128 @@
+import tkinter as tk
+from tkinter import messagebox
+import random
+
+class SpiderMaze:
+    def __init__(self, root, cols=21, rows=15, cell=28, time_limit=60):
+        self.root = root
+        self.cols, self.rows, self.cell = cols | 1, rows | 1, cell
+        self.time_limit = time_limit
+        self.remaining = time_limit
+        self.running = False
+        self.game_over = False
+        root.title("🕷 Паучок ищет выход")
+        top = tk.Frame(root); top.pack(fill=tk.X)
+        self.timer_lbl = tk.Label(top, text="", font=("Segoe UI", 13))
+        self.timer_lbl.pack(side=tk.LEFT, padx=8, pady=5)
+        tk.Button(top, text="Новая игра", command=self.reset).pack(side=tk.LEFT, padx=6)
+        tk.Button(top, text="Пуск (DFS)", command=self.start_dfs).pack(side=tk.LEFT, padx=6)
+        self.canvas = tk.Canvas(root, width=self.cols*cell, height=self.rows*cell, bg="#111")
+        self.canvas.pack()
+        self.reset()
+        self.tick()
+
+    def reset(self):
+        if self.running: return
+        self.canvas.delete("all")
+        self.game_over, self.running = False, False
+        self.remaining = self.time_limit
+        self.start, self.exit = (1, 1), (self.cols-2, self.rows-2)
+        self.walls = [[1]*(self.cols) for _ in range(self.rows)]
+        def carve(x, y):
+            dirs = [(2,0),(-2,0),(0,2),(0,-2)]
+            random.shuffle(dirs)
+            for dx, dy in dirs:
+                nx, ny = x+dx, y+dy
+                if 1<=nx<self.cols-1 and 1<=ny<self.rows-1 and self.walls[ny][nx]:
+                    self.walls[ny-dy//2][nx-dx//2] = 0
+                    self.walls[ny][nx] = 0
+                    carve(nx, ny)
+        self.walls[self.start[1]][self.start[0]] = 0
+        carve(*self.start)
+        self.draw_maze()
+        self.draw_exit()
+        self.draw_spider(*self.start)
+        self.update_timer()
+
+    def draw_maze(self):
+        c = self.cell
+        for y in range(self.rows):
+            for x in range(self.cols):
+                if self.walls[y][x]:
+                    self.canvas.create_rectangle(x*c, y*c, (x+1)*c, (y+1)*c, fill="#2e3440", width=0)
+
+    def draw_spider(self, x, y):
+        c = self.cell
+        if hasattr(self, "spider"): self.canvas.delete(self.spider)
+        r = c*0.35
+        self.spider = self.canvas.create_oval(x*c+r/2, y*c+r/2, x*c+c-r/2, y*c+c-r/2, fill="#a3be8c", outline="")
+
+    def draw_exit(self):
+        x, y = self.exit
+        c = self.cell
+        s = c*0.6
+        self.canvas.create_rectangle(x*c+(c-s)/2, y*c+(c-s)/2, x*c+(c+s)/2, y*c+(c+s)/2, fill="#bf616a", width=0)
+
+    def tick(self):
+        if not self.game_over:
+            self.remaining = max(0, self.remaining-1)
+            self.update_timer()
+            if self.remaining == 0: self.finish(False)
+        self.root.after(1000, self.tick)
+
+    def update_timer(self):
+        self.timer_lbl.config(text=f"⏱ {self.remaining:02d} c")
+
+    def start_dfs(self):
+        if self.running or self.game_over: return
+        self.running = True
+        self.dfs_stack = [self.start]
+        self.visited = {self.start}
+        self.parent = {}
+        self.step_dfs()
+
+    def step_dfs(self):
+        if not self.running or self.game_over: return
+        if not self.dfs_stack: self.running=False; return
+        x, y = self.dfs_stack.pop()
+        self.draw_spider(x, y)
+        self.canvas.create_rectangle(x*self.cell+10, y*self.cell+10,
+                                     x*self.cell+self.cell-10, y*self.cell+self.cell-10,
+                                     fill="#5e81ac", width=0, tags="vis")
+        if (x, y) == self.exit:
+            self.show_path()
+            self.finish(True)
+            return
+        for dx, dy in random.sample([(1,0),(-1,0),(0,1),(0,-1)], 4):
+            nx, ny = x+dx, y+dy
+            if 0<=nx<self.cols and 0<=ny<self.rows and not self.walls[ny][nx] and (nx,ny) not in self.visited:
+                self.visited.add((nx,ny))
+                self.parent[(nx,ny)] = (x,y)
+                self.dfs_stack.append((nx,ny))
+        self.root.after(60, self.step_dfs)
+
+    def show_path(self):
+        path = []
+        node = self.exit
+        while node != self.start:
+            path.append(node)
+            node = self.parent.get(node, self.start)
+        path.append(self.start)
+        path.reverse()
+        for i in range(len(path)-1):
+            x1, y1 = path[i]; x2, y2 = path[i+1]
+            c = self.cell
+            self.canvas.create_line(x1*c+c/2, y1*c+c/2, x2*c+c/2, y2*c+c/2, width=4, fill="#ebcb8b")
+
+    def finish(self, win):
+        if self.game_over: return
+        self.game_over = True
+        self.running = False
+        title = "Победа!" if win else "Время вышло"
+        text = "Паук нашёл выход!" if win else "Паук не успел выбраться..."
+        messagebox.showinfo(title, text)
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    SpiderMaze(root, cols=21, rows=15, cell=28, time_limit=60)
+    root.mainloop()
