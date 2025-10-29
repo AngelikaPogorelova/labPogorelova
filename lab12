@@ -95,7 +95,7 @@ class Game:
         if res[0]=='miss':self.msg_player="мимо"
         elif res[0]=='wounded':self.msg_player="ранен"
         elif res[0]=='killed':self.msg_player="убит"
-        if self.p2.dead():self.end("Ты победил!");return
+        if self.p2.dead():self.end("Игрок победил!");return
         self.turn=1 if res[0]in('wounded','killed')else 2
     def loop(self):
         if self.turn==2:
