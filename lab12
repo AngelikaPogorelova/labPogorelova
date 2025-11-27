@@ -1,150 +1,191 @@
-import tkinter as tk, random
-from collections import deque
-CELL, ROWS, COLS = 32, 10, 10
-SHIP_SIZES = [4]+[3]*2+[2]*3+[1]*4
+import tkinter as tk
+from tkinter import messagebox
+import random
 
-class Board:
-    def __init__(s):
-        s.g=[[-1]*COLS for _ in range(ROWS)]
-        s.ships=[]
-    def can_place(s,r,c,l,h):
-        a=[(r,c+i)if h else(r+i,c)for i in range(l)]
-        if any(not(0<=x<ROWS and 0<=y<COLS)for x,y in a):return 0
-        for x,y in a:
-            for dx in(-1,0,1):
-                for dy in(-1,0,1):
-                    nx,ny=x+dx,y+dy
-                    if 0<=nx<ROWS and 0<=ny<COLS and s.g[nx][ny]==2:return 0
-        return 1
-    def place(s,r,c,l,h):
-        if not s.can_place(r,c,l,h):return 0
-        a=[(r,c+i)if h else(r+i,c)for i in range(l)]
-        for x,y in a:s.g[x][y]=2
-        s.ships.append({'cells':set(a),'rem':set(a)})
-        return 1
-    def randomize(s):
-        s.__init__()
-        for l in SHIP_SIZES:
-            while 1:
-                r,c=random.randrange(ROWS),random.randrange(COLS)
-                if s.place(r,c,l,random.choice([0,1])):break
-        return s
-    def shot(s,r,c):
-        if s.g[r][c]in(0,1):return
-        if s.g[r][c]!=2:s.g[r][c]=0;return('miss',0)
-        s.g[r][c]=1
-        for sh in s.ships:
-            if (r,c)in sh['rem']:
-                sh['rem'].remove((r,c))
-                if not sh['rem']:
-                    for x,y in sh['cells']:
-                        for dx in(-1,0,1):
-                            for dy in(-1,0,1):
-                                nx,ny=x+dx,y+dy
-                                if 0<=nx<ROWS and 0<=ny<COLS and s.g[nx][ny]==-1:s.g[nx][ny]=0
-                    return('killed',1)
-                return('wounded',0)
-    def dead(s):return all(not sh['rem']for sh in s.ships)
+BOARD_SIZE = 10
+SHIP_SIZES = [4,3,3,2,2,2,1,1,1,1]
+player_board, bot_board = [], []
+player_display, bot_display = [], []
+player_buttons, bot_buttons = [], []
+ships_to_place = SHIP_SIZES.copy()
+placing_ships, current_turn, game_over = True, "player", False
+bot_mode, bot_hits = "search", []
 
-class Bot:
-    def __init__(s):
-        s.k=[[-1]*COLS for _ in range(ROWS)]
-        s.q=deque()
-        s.par=[(r,c)for r in range(ROWS)for c in range(COLS)if(r+c)%2==0]
-        random.shuffle(s.par)
-        s.i=0
-    def mark(s,r,c,res):
-        if res[0]=='miss':s.k[r][c]=0
+def create_board(): return [["~"]*BOARD_SIZE for _ in range(BOARD_SIZE)]
+def can_place_ship(b,x,y,s,d):
+    if d=="h" and y+s<=BOARD_SIZE:
+        for i in range(max(0,x-1),min(BOARD_SIZE,x+2)):
+            for j in range(max(0,y-1),min(BOARD_SIZE,y+s+1)):
+                if b[i][j]!="~": return False
+    elif d=="v" and x+s<=BOARD_SIZE:
+        for i in range(max(0,x-1),min(BOARD_SIZE,x+s+1)):
+            for j in range(max(0,y-1),min(BOARD_SIZE,y+2)):
+                if b[i][j]!="~": return False
+    else: return False
+    return True
+def place_ship(b,x,y,s,d):
+    if not can_place_ship(b,x,y,s,d): return False
+    for i in range(s):
+        if d=="h": b[x][y+i]="S"
+        else: b[x+i][y]="S"
+    return True
+def setup_bot_ships():
+    for s in SHIP_SIZES:
+        while True:
+            x,y=random.randint(0,BOARD_SIZE-1),random.randint(0,BOARD_SIZE-1)
+            d=random.choice(["h","v"])
+            if place_ship(bot_board,x,y,s,d): break
+def setup_player_random():
+    global player_board, ships_to_place
+    player_board=create_board()
+    ships_to_place=SHIP_SIZES.copy()
+    for s in SHIP_SIZES:
+        while True:
+            x,y=random.randint(0,BOARD_SIZE-1),random.randint(0,BOARD_SIZE-1)
+            d=random.choice(["h","v"])
+            if place_ship(player_board,x,y,s,d): break
+    update_ui()
+
+def is_hit(b,x,y): return b[x][y]=="S"
+def is_ship_sunk(b,x,y,dsp):
+    if b[x][y]!="X": return False
+    v,s=set(),[(x,y)]
+    while s:
+        cx,cy=s.pop()
+        if (cx,cy) in v: continue
+        v.add((cx,cy))
+        for dx,dy in [(0,1),(1,0),(0,-1),(-1,0)]:
+            nx,ny=cx+dx,cy+dy
+            if 0<=nx<BOARD_SIZE and 0<=ny<BOARD_SIZE and b[nx][ny]=="X": s.append((nx,ny))
+    for cx,cy in v:
+        for dx,dy in [(0,1),(1,0),(0,-1),(-1,0),(1,1),(1,-1),(-1,1),(-1,-1)]:
+            nx,ny=cx+dx,cy+dy
+            if 0<=nx<BOARD_SIZE and 0<=ny<BOARD_SIZE and b[nx][ny]=="S": return False
+    for cx,cy in v:
+        for dx,dy in [(0,1),(1,0),(0,-1),(-1,0),(1,1),(1,-1),(-1,1),(-1,-1)]:
+            nx,ny=cx+dx,cy+dy
+            if 0<=nx<BOARD_SIZE and 0<=ny<BOARD_SIZE and b[nx][ny]=="~": b[nx][ny]=dsp[nx][ny]="O"
+    return True
+def all_ships_sunk(b): return not any("S" in row for row in b)
+def update_ui():
+    for i in range(BOARD_SIZE):
+        for j in range(BOARD_SIZE):
+            c=player_board[i][j]
+            bg="lightblue" if c=="S" else "red" if c=="X" else "lightgray" if c=="O" else "white"
+            player_buttons[i][j].config(bg=bg)
+            c=player_display[i][j]
+            text="💥" if c=="X" else "•" if c=="O" else ""
+            bg="red" if c=="X" else "lightgray" if c=="O" else "lightcyan"
+            bot_buttons[i][j].config(text=text,bg=bg,state="normal" if current_turn=="player" and not game_over and not placing_ships else "disabled")
+
+def player_turn(x,y):
+    global current_turn,game_over
+    if game_over or player_display[x][y] in ["X","O"] or placing_ships: return
+    hit=is_hit(bot_board,x,y)
+    player_display[x][y]=bot_board[x][y]="X" if hit else "O"
+    is_ship_sunk(bot_board,x,y,player_display)
+    if all_ships_sunk(bot_board):
+        messagebox.showinfo("Победа!","🎉 Вы потопили все корабли! 🎉"); game_over=True
+    else:
+        if not hit: current_turn="bot"; root.after(500,bot_turn)
+    update_ui()
+
+def bot_turn():
+    global current_turn,game_over,bot_hits,bot_mode
+    if game_over: return
+    if bot_mode=="hunt" and bot_hits:
+        last_hit=bot_hits[-1]
+        neighbors=[(last_hit[0]+dx,last_hit[1]+dy) for dx,dy in [(0,1),(1,0),(0,-1),(-1,0)]]
+        candidates=[(x,y) for x,y in neighbors if 0<=x<BOARD_SIZE and 0<=y<BOARD_SIZE and bot_display[x][y]=="~"]
+        if candidates: x,y=random.choice(candidates)
+        else: bot_hits.pop(); bot_mode="search"; bot_turn(); return
+    else:
+        candidates=[(i,j) for i in range(BOARD_SIZE) for j in range(BOARD_SIZE) if bot_display[i][j]=="~"]
+        x,y=random.choice(candidates)
+    hit=is_hit(player_board,x,y)
+    bot_display[x][y]=player_board[x][y]="X" if hit else "O"
+    is_ship_sunk(player_board,x,y,bot_display)
+    if hit: bot_hits.append((x,y)); bot_mode="hunt"; root.after(500,bot_turn)
+    else: current_turn="player"
+    if all_ships_sunk(player_board):
+        messagebox.showinfo("Поражение"," Бот потопил все ваши корабли!"); game_over=True
+    update_ui()
+
+def place_ship_click(x,y):
+    global ships_to_place,placing_ships
+    if not placing_ships: return
+    size=int(size_var.get())
+    d="h" if dir_var.get()=="Горизонтально" else "v"
+    if size not in ships_to_place: return
+    if place_ship(player_board,x,y,size,d): ships_to_place.remove(size)
+    update_ui()
+
+def start_game():
+    global placing_ships, current_turn, player_display, bot_display, game_over, ships_to_place
+    if placing_ships and ships_to_place:
+        total_ships_on_board = sum(row.count("S") for row in player_board)
+        if total_ships_on_board != sum(SHIP_SIZES):
+            messagebox.showinfo("Ошибка", "Расставьте все корабли или нажмите Рандом")
+            return
         else:
-            s.k[r][c]=1
-            for d in((1,0),(-1,0),(0,1),(0,-1)):
-                x,y=r+d[0],c+d[1]
-                if 0<=x<ROWS and 0<=y<COLS and s.k[x][y]==-1:s.q.appendleft((x,y))
-    def pick(s):
-        while s.q:
-            r,c=s.q.popleft()
-            if s.k[r][c]==-1:return r,c
-        while s.i<len(s.par):
-            r,c=s.par[s.i];s.i+=1
-            if s.k[r][c]==-1:return r,c
-        for r in range(ROWS):
-            for c in range(COLS):
-                if s.k[r][c]==-1:return r,c
-        return None,None
+            ships_to_place.clear()
+    placing_ships = False
+    current_turn = "player"
+    game_over = False
+    player_display = create_board()
+    bot_display = create_board()
+    for i in range(BOARD_SIZE):
+        for j in range(BOARD_SIZE):
+            bot_buttons[i][j].config(state="normal")
+    update_ui()
 
-class Game:
-    def __init__(s,root):
-        s.r=root
-        s.cv=tk.Canvas(root,width=760,height=480,bg="#071126",highlightthickness=0)
-        s.cv.pack()
-        s.frame=tk.Frame(root,bg="#071126");s.frame.pack(pady=5)
-        s.bt1=tk.Button(s.frame,text="Повернуть",command=s.tog)
-        s.bt2=tk.Button(s.frame,text="Рандом",command=s.prand)
-        s.bt3=tk.Button(s.frame,text="Старт",command=s.start,state="disabled")
-        s.bt4=tk.Button(s.frame,text="Сброс",command=s.reset)
-        for i,b in enumerate([s.bt1,s.bt2,s.bt3,s.bt4]):b.grid(row=0,column=i,padx=5)
-        s.setup()
-        s.cv.bind("<Button-1>",s.click)
-        s.cv.bind("<Button-3>",s.rc)
-        s.dr()
-    def setup(s):
-        s.p1=Board();s.p2=Board().randomize();s.bot=Bot()
-        s.turn=1;s.msgp=s.msgb="";s.placing=1;s.left=list(SHIP_SIZES);s.h=1
-        s.bt3.config(state="disabled")
-    def tog(s):s.h^=1;s.dr()
-    def prand(s):s.p1=Board().randomize();s.placing=0;s.bt3.config(state="normal");s.dr()
-    def start(s):
-        if s.placing and s.left:return
-        s.placing=0;s.bt3.config(state="disabled");s.msgp="Ход игрока";s.turn=1;s.dr()
-    def reset(s):s.setup();s.dr()
-    def dc(s,ox,oy,r,c,v,show=0):
-        x1,y1=ox+c*CELL,oy+r*CELL;x2,y2=x1+CELL,y1+CELL
-        s.cv.create_rectangle(x1,y1,x2,y2,fill="#193145",outline="#516675")
-        if v==2 and show:s.cv.create_rectangle(x1+3,y1+6,x2-3,y2-6,fill="#3b8dbd",outline="#1f6b8b")
-        if v==0:s.cv.create_oval(x1+8,y1+8,x2-8,y2-8,fill="#ccc")
-        if v==1:s.cv.create_oval(x1+6,y1+6,x2-6,y2-6,fill="#e33")
-    def dr(s):
-        s.cv.delete("all")
-        for brd,ox,oy,show in[(s.p1,30,30,1),(s.p2,420,30,0)]:
-            for r in range(ROWS):
-                for c in range(COLS):s.dc(ox,oy,r,c,brd.g[r][c],show)
-            s.cv.create_text(ox+COLS*CELL/2,oy+ROWS*CELL+18,text="Твои"if show else"Враг",fill="white")
-        s.cv.create_text(200,420,text=f"Игрок: {s.msgp}",fill="gold")
-        s.cv.create_text(560,420,text=f"Бот: {s.msgb}",fill="#f88")
-    def click(s,e):
-        if s.turn==1:
-            if 30<=e.x<30+COLS*CELL and 30<=e.y<30+ROWS*CELL:
-                r,c=(e.y-30)//CELL,(e.x-30)//CELL
-                if s.placing and s.left:
-                    if s.p1.place(r,c,s.left[0],s.h):s.left.pop(0)
-                    if not s.left:s.bt3.config(state="normal");s.placing=0;s.msgp="Готов"
-                    s.dr()
-            elif 420<=e.x<420+COLS*CELL and 30<=e.y<30+ROWS*CELL and not s.placing:
-                r,c=(e.y-30)//CELL,(e.x-420)//CELL
-                res=s.p2.shot(r,c)
-                if not res:return
-                s.msgp={'miss':'мимо','wounded':'ранен','killed':'убит'}[res[0]]
-                s.dr()
-                if s.p2.dead():s.end("Ты победил!");return
-                if res[0]=='miss':s.turn=2;s.r.after(600,s.bot_move)
-    def rc(s,e):
-        if s.placing:s.tog()
-    def bot_move(s):
-        r,c=s.bot.pick()
-        if r is None:s.end("Ничья");return
-        res=s.p1.shot(r,c)
-        if not res:return s.bot_move()
-        s.bot.mark(r,c,res)
-        s.msgb={'miss':'мимо','wounded':'ранен','killed':'убит'}[res[0]]
-        s.dr()
-        if s.p1.dead():s.end("Бот победил!");return
-        if res[0]=='miss':s.turn=1
-        else:s.r.after(600,s.bot_move)
-    def end(s,t):
-        s.cv.delete("all")
-        s.cv.create_rectangle(0,0,760,480,fill="#071126")
-        s.cv.create_text(380,200,text=t,fill="gold",font=("Arial",28,"bold"))
-        s.cv.create_text(380,260,text="Нажми Сброс",fill="white")
+def stop_game():
+    global placing_ships,current_turn,game_over,player_board,bot_board,player_display,bot_display,ships_to_place
+    placing_ships=True; current_turn="player"; game_over=False
+    player_board=create_board(); bot_board=create_board(); player_display=create_board(); bot_display=create_board()
+    ships_to_place=SHIP_SIZES.copy(); setup_bot_ships(); update_ui()
 
-if __name__=="__main__":
-    r=tk.Tk();r.title("Морской бой");r.resizable(0,0);Game(r);r.mainloop()
+def create_ui():
+    global player_buttons,bot_buttons,size_var,dir_var
+    title=tk.Label(root,text=" МОРСКОЙ БОЙ ",font=("Arial",16,"bold"),fg="darkblue")
+    title.grid(row=0,column=0,columnspan=2,pady=10)
+    pf=tk.Frame(root,bd=2,relief="ridge",bg="lightgray"); pf.grid(row=1,column=0,padx=10,pady=10)
+    bf=tk.Frame(root,bd=2,relief="ridge",bg="lightgray"); bf.grid(row=1,column=1,padx=10,pady=10)
+    tk.Label(pf,text="ВАШЕ ПОЛЕ",bg="lightgray",font=("Arial",12,"bold")).grid(row=0,column=0,columnspan=11)
+    tk.Label(bf,text="ПОЛЕ ПРОТИВНИКА",bg="lightgray",font=("Arial",12,"bold")).grid(row=0,column=0,columnspan=11)
+    letters="АБВГДЕЖЗИК"
+    for i in range(BOARD_SIZE):
+        tk.Label(pf,text=letters[i],bg="lightgray").grid(row=1,column=i+1)
+        tk.Label(bf,text=letters[i],bg="lightgray").grid(row=1,column=i+1)
+        tk.Label(pf,text=str(i+1),bg="lightgray").grid(row=i+2,column=0)
+        tk.Label(bf,text=str(i+1),bg="lightgray").grid(row=i+2,column=0)
+    player_buttons=[]; bot_buttons=[]
+    for i in range(BOARD_SIZE):
+        pr,br=[],[]
+        for j in range(BOARD_SIZE):
+            btn=tk.Button(pf,width=3,height=1,command=lambda x=i,y=j: place_ship_click(x,y))
+            btn.grid(row=i+2,column=j+1); pr.append(btn)
+            btn=tk.Button(bf,width=3,height=1,command=lambda x=i,y=j: player_turn(x,y),state="disabled")
+            btn.grid(row=i+2,column=j+1); br.append(btn)
+        player_buttons.append(pr); bot_buttons.append(br)
+    control_frame=tk.Frame(root,bg="lightyellow",bd=2,relief="groove"); control_frame.grid(row=2,column=0,columnspan=2,pady=10)
+    tk.Label(control_frame,text="Размер:",bg="lightyellow").grid(row=0,column=0)
+    size_var=tk.StringVar(value=str(SHIP_SIZES[0]))
+    tk.OptionMenu(control_frame,size_var,*sorted(set(SHIP_SIZES),reverse=True)).grid(row=0,column=1)
+    tk.Label(control_frame,text="Направление:",bg="lightyellow").grid(row=0,column=2)
+    dir_var=tk.StringVar(value="Горизонтально")
+    tk.OptionMenu(control_frame,dir_var,"Горизонтально","Вертикально").grid(row=0,column=3)
+    tk.Button(control_frame,text="Старт",command=start_game,bg="lightgreen").grid(row=0,column=4,padx=5)
+    tk.Button(control_frame,text="Рандом",command=setup_player_random,bg="lightblue").grid(row=0,column=5,padx=5)
+    tk.Button(control_frame,text="Сброс",command=stop_game,bg="tomato").grid(row=0,column=6,padx=5)
+    setup_bot_ships()
+    update_ui()
+
+def main():
+    global root,player_board,bot_board,player_display,bot_display
+    root=tk.Tk(); root.title("Морской бой"); root.configure(bg="aliceblue")
+    player_board=create_board(); bot_board=create_board()
+    player_display=create_board(); bot_display=create_board()
+    create_ui(); root.mainloop()
+
+if __name__=="__main__": main()
