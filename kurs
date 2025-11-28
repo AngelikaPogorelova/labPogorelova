@@ -1,0 +1,216 @@
+import tkinter as tk
+from tkinter import simpledialog, messagebox
+import json, hashlib
+from pathlib import Path
+
+USER_FILE = Path("users.json")
+CELL_SIZE = 60
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def register_user(username, password):
+    users = {}
+    if USER_FILE.exists():
+        users = json.loads(USER_FILE.read_text())
+    if username in users:
+        return False
+    users[username] = hash_password(password)
+    USER_FILE.write_text(json.dumps(users))
+    return True
+
+def authorize_user(username, password):
+    if not USER_FILE.exists():
+        return False
+    users = json.loads(USER_FILE.read_text())
+    return username in users and users[username] == hash_password(password)
+
+class CheckersGame:
+    def __init__(self):
+        self.rows = 8
+        self.cols = 10
+        self.board = self.create_board()
+        self.turn = "white"
+        self.selected = None
+        self.must_jump = []
+
+    def create_board(self):
+        board = [[None for _ in range(self.cols)] for _ in range(self.rows)]
+        for r in range(3):
+            for c in range(self.cols):
+                if (r + c) % 2 == 1:
+                    board[r][c] = "B"
+        for r in range(5, 8):
+            for c in range(self.cols):
+                if (r + c) % 2 == 1:
+                    board[r][c] = "C"
+        return board
+
+    def in_bounds(self, r, c):
+        return 0 <= r < self.rows and 0 <= c < self.cols
+
+    def get_piece(self, r, c):
+        return self.board[r][c]
+
+    def move_piece(self, start, end):
+        sr, sc = start
+        er, ec = end
+        piece = self.board[sr][sc]
+        dr, dc = er - sr, ec - sc
+        jumped = []
+        if abs(dr) == 2 and abs(dc) == 2:
+            jr, jc = sr + dr // 2, sc + dc // 2
+            jumped.append((jr, jc))
+            self.board[jr][jc] = None
+        self.board[er][ec] = piece
+        self.board[sr][sc] = None
+        if piece == "B" and er == self.rows - 1:
+            self.board[er][ec] = "BK"
+        if piece == "C" and er == 0:
+            self.board[er][ec] = "CK"
+        if jumped:
+            more_jumps = self.get_valid_jumps(er, ec)
+            if more_jumps:
+                self.selected = (er, ec)
+                self.must_jump = more_jumps
+                return
+        self.turn = "black" if self.turn == "white" else "white"
+        self.selected = None
+        self.must_jump = []
+
+    def get_valid_moves(self, r, c):
+        piece = self.board[r][c]
+        moves = []
+        jumps = self.get_valid_jumps(r, c)
+        if jumps:
+            return jumps
+        directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+        if piece in ["B", "BK"]:
+            for dr, dc in directions:
+                if piece == "B" and dr == -1:
+                    continue
+                nr, nc = r + dr, c + dc
+                if self.in_bounds(nr, nc) and self.board[nr][nc] is None:
+                    moves.append((nr, nc))
+        if piece in ["C", "CK"]:
+            for dr, dc in directions:
+                if piece == "C" and dr == 1:
+                    continue
+                nr, nc = r + dr, c + dc
+                if self.in_bounds(nr, nc) and self.board[nr][nc] is None:
+                    moves.append((nr, nc))
+        return moves
+
+    def get_valid_jumps(self, r, c):
+        piece = self.board[r][c]
+        jumps = []
+        directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+        for dr, dc in directions:
+            if piece == "B" and dr == -1:
+                continue
+            if piece == "C" and dr == 1:
+                continue
+            nr, nc = r + dr, c + dc
+            nr2, nc2 = r + 2*dr, c + 2*dc
+            if self.in_bounds(nr2, nc2) and self.board[nr2][nc2] is None:
+                target = self.board[nr][nc]
+                if target and target[0] != piece[0]:
+                    jumps.append((nr2, nc2))
+        return jumps
+
+    def has_moves(self, color):
+        for r in range(self.rows):
+            for c in range(self.cols):
+                p = self.board[r][c]
+                if p and (p[0].lower() == color[0]):
+                    if self.get_valid_moves(r, c):
+                        return True
+        return False
+
+    def check_winner(self):
+        white = sum(p is not None and p.startswith("B") for row in self.board for p in row)
+        black = sum(p is not None and p.startswith("C") for row in self.board for p in row)
+        if white == 0 or not self.has_moves("white"):
+            return "Чёрные выиграли!"
+        if black == 0 or not self.has_moves("black"):
+            return "Белые выиграли!"
+        return None
+
+class CheckersUI:
+    def __init__(self, root, game):
+        self.root = root
+        self.game = game
+        self.canvas = tk.Canvas(root, width=game.cols*CELL_SIZE, height=game.rows*CELL_SIZE)
+        self.canvas.pack()
+        self.status = tk.Label(root, text=f"Ход: {self.game.turn}", font=("Arial", 14))
+        self.status.pack()
+        self.draw_board()
+        self.canvas.bind("<Button-1>", self.click_cell)
+        self.update_status()
+
+    def draw_board(self):
+        self.canvas.delete("all")
+        for r in range(self.game.rows):
+            for c in range(self.game.cols):
+                color = "saddle brown" if (r+c)%2 else "burlywood1"
+                self.canvas.create_rectangle(c*CELL_SIZE, r*CELL_SIZE,
+                                             (c+1)*CELL_SIZE, (r+1)*CELL_SIZE,
+                                             fill=color)
+                piece = self.game.get_piece(r, c)
+                if piece:
+                    fill_color = "white" if piece.startswith("B") else "black"
+                    self.canvas.create_oval(c*CELL_SIZE+10, r*CELL_SIZE+10,
+                                            (c+1)*CELL_SIZE-10, (r+1)*CELL_SIZE-10,
+                                            fill=fill_color)
+                    if "K" in piece:
+                        self.canvas.create_text(c*CELL_SIZE+30, r*CELL_SIZE+30,
+                                                text="K", fill="red", font=("Arial", 16, "bold"))
+        if self.game.selected:
+            sr, sc = self.game.selected
+            self.canvas.create_rectangle(sc*CELL_SIZE, sr*CELL_SIZE,
+                                         (sc+1)*CELL_SIZE, (sr+1)*CELL_SIZE,
+                                         outline="yellow", width=3)
+
+    def click_cell(self, event):
+        col = event.x // CELL_SIZE
+        row = event.y // CELL_SIZE
+        piece = self.game.get_piece(row, col)
+        if self.game.selected:
+            moves = self.game.get_valid_moves(*self.game.selected)
+            if (row, col) in moves:
+                self.game.move_piece(self.game.selected, (row, col))
+                winner = self.game.check_winner()
+                if winner:
+                    messagebox.showinfo("Игра окончена", winner)
+                    self.root.destroy()
+            self.game.selected = None if not self.game.must_jump else self.game.selected
+        else:
+            if piece and piece[0].lower() == self.game.turn[0]:
+                moves = self.game.get_valid_moves(row, col)
+                if moves:
+                    self.game.selected = (row, col)
+        self.draw_board()
+        self.update_status()
+
+    def update_status(self):
+        self.status.config(text=f"Ход: {self.game.turn}")
+
+def main():
+    root = tk.Tk()
+    root.title("80-клеточные русские шашки")
+    username = simpledialog.askstring("Логин", "Введите логин:")
+    password = simpledialog.askstring("Пароль", "Введите пароль:", show="*")
+    if not authorize_user(username, password):
+        if messagebox.askyesno("Регистрация", "Пользователь не найден. Зарегистрироваться?"):
+            if register_user(username, password):
+                messagebox.showinfo("Успех", "Пользователь зарегистрирован")
+            else:
+                messagebox.showerror("Ошибка", "Не удалось зарегистрировать")
+        else:
+            return
+    game = CheckersGame()
+    app = CheckersUI(root, game)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
